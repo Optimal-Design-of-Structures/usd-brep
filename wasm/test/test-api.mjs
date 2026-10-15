@@ -86,6 +86,42 @@ check('tessellate: closed + outward (mesh volume ~ exact)', Math.abs(rel(mv, vU)
 const ed = M.edges(beam, 10);
 check('edges: polylines', ed.counts.length > 0 && ed.counts.reduce((s, c) => s + c, 0) * 3 === ed.positions.length, `polylines=${ed.counts.length} pts=${ed.positions.length / 3}`);
 
+// --- 5b. extrudeOutline: exact arcs (hollow = outer minus inner)
+{
+  const rect = (b, h, r) => [
+    { t: 'L', a: [-b / 2 + r, -h / 2, b / 2 - r, -h / 2] }, { t: 'A', a: [b / 2 - r, -h / 2 + r, r, 270, 360] },
+    { t: 'L', a: [b / 2, -h / 2 + r, b / 2, h / 2 - r] }, { t: 'A', a: [b / 2 - r, h / 2 - r, r, 0, 90] },
+    { t: 'L', a: [b / 2 - r, h / 2, -b / 2 + r, h / 2] }, { t: 'A', a: [-b / 2 + r, h / 2 - r, r, 90, 180] },
+    { t: 'L', a: [-b / 2, h / 2 - r, -b / 2, -h / 2 + r] }, { t: 'A', a: [-b / 2 + r, -h / 2 + r, r, 180, 270] },
+  ];
+  const circle = (r) => [{ t: 'A', a: [0, 0, r, 0, 180] }, { t: 'A', a: [0, 0, r, 180, 360] }];
+  const hollow = (outer, inner) => {
+    const o = M.extrudeOutline(outer, 1000), i = M.extrudeOutline(inner, 1040);
+    M.translate(i, 0, 0, -20);
+    const r = M.subtract(o, i);
+    return { id: o, r };
+  };
+  const shs = hollow(rect(100, 100, 7.5), rect(90, 90, 5));
+  const shsRef = (100 * 100 - (4 - Math.PI) * 7.5 ** 2 - (90 * 90 - (4 - Math.PI) * 5 ** 2)) * 1000;
+  check('extrudeOutline: SHS 100x100x5 (r 7.5/5) volume', shs.r.ok && Math.abs(rel(M.volume(shs.id, 1e-8), shsRef)) < 1e-5, `rel=${rel(M.volume(shs.id, 1e-8), shsRef).toExponential(2)}`);
+  const chs = hollow(circle(114.3 / 2), circle(102.3 / 2));
+  const chsRef = Math.PI / 4 * (114.3 ** 2 - 102.3 ** 2) * 1000;
+  check('extrudeOutline: CHS 114.3x6 volume', chs.r.ok && Math.abs(rel(M.volume(chs.id, 1e-8), chsRef)) < 1e-5, `rel=${rel(M.volume(chs.id, 1e-8), chsRef).toExponential(2)}`);
+  // equal angle L100x100x10: root radius r1 = 12 at the heel inside, toe radii r2 = 6
+  const t = 10, a = 100, r1 = 12, r2 = 6;
+  const L = [
+    { t: 'L', a: [0, 0, a, 0] }, { t: 'L', a: [a, 0, a, t - r2] }, { t: 'A', a: [a - r2, t - r2, r2, 0, 90] },
+    { t: 'L', a: [a - r2, t, t + r1, t] }, { t: 'A', a: [t + r1, t + r1, r1, 180, 270] },
+    { t: 'L', a: [t, t + r1, t, a - r2] }, { t: 'A', a: [t - r2, a - r2, r2, 0, 90] },
+    { t: 'L', a: [t - r2, a, 0, a] }, { t: 'L', a: [0, a, 0, 0] },
+  ];
+  const lid = M.extrudeOutline(L, 1000);
+  const lRef = (2 * a * t - t * t + (1 - Math.PI / 4) * r1 * r1 - 2 * (1 - Math.PI / 4) * r2 * r2) * 1000;
+  check('extrudeOutline: L100x100x10 (r1 12, r2 6) volume', lid > 0 && M.validate(lid).manifold && Math.abs(rel(M.volume(lid, 1e-8), lRef)) < 1e-5, `rel=${lid ? rel(M.volume(lid, 1e-8), lRef).toExponential(2) : 'n/a'}`);
+  check('extrudeOutline: open outline rejected', M.extrudeOutline([{ t: 'L', a: [0, 0, 1, 0] }, { t: 'X', a: [] }], 10) === 0);
+  [shs.id, chs.id, lid].forEach((id) => M.free(id));
+}
+
 // --- 6. drawings (SmHCR semantics frozen: view vector towards the eye, smooth edges suppressed)
 const lens = (g) => { const out = []; let o = 0; for (const n of g.counts) { let L = 0; for (let i = 0; i < n - 1; i++) { const a = (o + i) * 2, c = (o + i + 1) * 2; L += Math.hypot(g.positions[c] - g.positions[a], g.positions[c + 1] - g.positions[a + 1]); } out.push(Math.round(L)); o += n; } return out.sort((x, y) => x - y); };
 {

@@ -20,6 +20,7 @@ detailing module (decision D193 in the ODS vault).
 | Function | Purpose |
 |---|---|
 | `extrudeI(h, b, tw, tf, r, L)`, `extrudePolygon([x,y,…], L)`, `box(x,y,z,dx,dy,dz)` | construction (I section with root radius, plate / any polygon) |
+| `extrudeOutline([{t:'L',a:[x0,y0,x1,y1]} \| {t:'A',a:[cx,cy,r,startDeg,endDeg]}, …], L)` | closed outline of lines and exact arcs (tube corners, root/toe radii, circles); hollow sections = outer minus inner via `subtract` (since v0.2.0) |
 | `hole(id, px,py,pz, dx,dy,dz, Ø, depth)` | cylindrical hole in any direction |
 | `cutBox(id, …)`, `cutPlane(id, p, n)` | box cut; plane cut keeping the side `n` points to (implemented as a half-space boolean: `SmApiCut` never yields a manifold solid in 1.0.0) |
 | `unite(a, b)`, `subtract(a, b)` | booleans between parts (`b` is freed on success) |

@@ -161,6 +161,43 @@ int extrudePolygon(val xy, double length)
     return put(sweepClosedCurves(c, length));
 }
 
+// Closed outline in XY built from line and arc segments, extruded along +Z (exact arcs: tube corners,
+// root and toe radii, circles). segs = [{t:'L', a:[x0,y0,x1,y1]}, {t:'A', a:[cx,cy,r,startDeg,endDeg]}, ...];
+// consecutive segments must meet (within modelling tolerance). Hollow sections = outer minus inner (subtract).
+int extrudeOutline(val segs, double length)
+{
+    ensureContext();
+    const unsigned n = segs["length"].as<unsigned>();
+    if (n < 2) return 0;
+    SmTArray<SmCurve*> c;
+    bool bad = false;
+    for (unsigned i = 0; i < n && !bad; ++i)
+    {
+        val s = segs[i];
+        const std::string t = s["t"].as<std::string>();
+        std::vector<double> a = convertJSArrayToNumberVector<double>(s["a"]);
+        if (t == "L" && a.size() == 4)
+        {
+            SmLine* l = nullptr;
+            bad = SmApiCreateLineSegment(SmPoint3d(a[0], a[1], 0), SmPoint3d(a[2], a[3], 0), l) != SM_SUCCESS;
+            if (l) c.Add(l);
+        }
+        else if (t == "A" && a.size() == 5)
+        {
+            SmBSplineCurve* arc = nullptr;
+            bad = SmApiCreateArc(SmPoint3d(a[0], a[1], 0), a[2], a[3], a[4], arc) != SM_SUCCESS;
+            if (arc) c.Add(arc);
+        }
+        else bad = true;
+    }
+    if (bad)
+    {
+        for (ULONG i = 0; i < c.GetSize(); ++i) delete c[i];
+        return 0;
+    }
+    return put(sweepClosedCurves(c, length));
+}
+
 int box(double x, double y, double z, double dx, double dy, double dz)
 {
     ensureContext();
@@ -568,6 +605,7 @@ EMSCRIPTEN_BINDINGS(brep)
         .field("ms", &OpResult::ms);
     function("extrudeI", &extrudeI);
     function("extrudePolygon", &extrudePolygon);
+    function("extrudeOutline", &extrudeOutline);
     function("box", &box);
     function("copy", &copy);
     function("free", &freeBrep);
