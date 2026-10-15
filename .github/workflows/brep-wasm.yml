@@ -1,0 +1,88 @@
+# SPDX-License-Identifier: Apache-2.0
+# iQSteel: builds the unmodified USD BRep kernel + the narrow API (wasm/) to WebAssembly,
+# runs the API contract tests and publishes releases on brep-wasm-v* tags.
+name: brep-wasm
+
+on:
+  push:
+    branches: [iqsteel-wasm]
+    tags: ['brep-wasm-v*']
+  pull_request:
+    branches: [iqsteel-wasm]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  EMSDK_VERSION: '6.0.12'
+
+jobs:
+  build:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0   # the pristine check diffs against the pinned upstream commit
+          lfs: false       # kernel test fixtures are not needed
+
+      # D193 / S75.G4: zero patches in the kernel. Only wasm/ and .github/ may differ from upstream.
+      - name: Kernel pristine vs pinned upstream
+        run: |
+          base=$(cut -d' ' -f1 wasm/UPSTREAM)
+          echo "upstream: $base"
+          git diff --exit-code --stat "$base" HEAD -- . ':(exclude)wasm' ':(exclude).github'
+
+      - name: Cache emsdk
+        uses: actions/cache@v4
+        with:
+          path: ~/emsdk
+          key: emsdk-${{ env.EMSDK_VERSION }}-${{ runner.os }}
+
+      - name: Install emsdk ${{ env.EMSDK_VERSION }}
+        run: |
+          if [ ! -x ~/emsdk/upstream/emscripten/em++ ]; then
+            rm -rf ~/emsdk
+            git clone --depth 1 https://github.com/emscripten-core/emsdk.git ~/emsdk
+            ~/emsdk/emsdk install "$EMSDK_VERSION"
+          fi
+          ~/emsdk/emsdk activate "$EMSDK_VERSION"
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+
+      - name: Build (Oz)
+        run: |
+          source ~/emsdk/emsdk_env.sh
+          python3 wasm/build_wasm.py --opt Oz --jobs "$(nproc)"
+
+      - name: API contract tests
+        run: node wasm/test/test-api.mjs wasm/dist
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: brep-wasm
+          path: wasm/dist/
+          if-no-files-found: error
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/brep-wasm-v')
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          name: brep-wasm
+          path: dist
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          GH_REPO: ${{ github.repository }}
+        run: |
+          (cd dist && zip -r "../${GITHUB_REF_NAME}.zip" .)
+          gh release create "$GITHUB_REF_NAME" "${GITHUB_REF_NAME}.zip" dist/brep.mjs dist/brep.wasm dist/build-info.json \
+            --title "$GITHUB_REF_NAME" \
+            --notes "USD BRep (SMLib) kernel, unmodified at the commit in build-info.json, compiled to WebAssembly (-Oz) with the iQSteel narrow API. Apache-2.0 (LICENSE, NOTICE in the zip)."

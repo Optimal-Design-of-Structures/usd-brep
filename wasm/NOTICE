@@ -1,0 +1,9 @@
+brep.wasm / brep.mjs — USD BRep (SMLib) kernel compiled to WebAssembly with a narrow JavaScript API.
+
+Kernel: USD BRep, Copyright (c) 2020-2026, NVIDIA CORPORATION & AFFILIATES.
+Licensed under the Apache License, Version 2.0 (see LICENSE).
+Source: https://github.com/NVIDIA-Omniverse/usd-brep — compiled unmodified at the commit recorded in
+build-info.json ("upstream.commit").
+
+API layer (brep_api.cpp) and WASM build: Optimal Design of Structures (iQSteel), Apache License 2.0.
+Fork: https://github.com/Optimal-Design-of-Structures/usd-brep (branch iqsteel-wasm, folder wasm/).
